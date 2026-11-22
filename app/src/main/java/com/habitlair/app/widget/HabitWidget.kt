@@ -1,6 +1,7 @@
 package com.habitlair.app.widget
 
 import android.content.Context
+import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -77,14 +78,15 @@ class HabitWidget : GlanceAppWidget() {
             }
         val items = habits + tasks
         val dateText = LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, MMM d"))
-        provideContent { GlanceTheme { WidgetContent(items, dateText) } }
+        provideContent { GlanceTheme { WidgetContent(context, items, dateText) } }
     }
 }
 
 @Composable
-private fun WidgetContent(items: List<WidgetItem>, dateText: String) {
+private fun WidgetContent(context: Context, items: List<WidgetItem>, dateText: String) {
     val total = items.size
     val done = items.count { it.done }
+    val openApp = actionStartActivity(Intent(context, MainActivity::class.java))
     Column(
         modifier = GlanceModifier.fillMaxSize()
             .background(GlanceTheme.colors.widgetBackground)
@@ -92,7 +94,7 @@ private fun WidgetContent(items: List<WidgetItem>, dateText: String) {
             .padding(14.dp)
     ) {
         Row(
-            modifier = GlanceModifier.fillMaxWidth().clickable(actionStartActivity<MainActivity>()),
+            modifier = GlanceModifier.fillMaxWidth().clickable(openApp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = GlanceModifier.defaultWeight()) {
@@ -137,13 +139,13 @@ private fun WidgetRow(item: WidgetItem) {
         actionParametersOf(ItemIdKey to item.id, ItemIsTaskKey to item.isTask)
     )
     Row(
-        modifier = GlanceModifier.fillMaxWidth().padding(vertical = 5.dp).clickable(toggle),
+        modifier = GlanceModifier.fillMaxWidth().padding(vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Image(
             provider = ImageProvider(if (item.done) R.drawable.ic_check_on else R.drawable.ic_check_off),
             contentDescription = if (item.done) "Completed. Tap to undo" else "Not done. Tap to complete",
-            modifier = GlanceModifier.size(26.dp),
+            modifier = GlanceModifier.size(26.dp).clickable(toggle),
             colorFilter = ColorFilter.tint(if (item.done) GlanceTheme.colors.primary else GlanceTheme.colors.outline)
         )
         Spacer(modifier = GlanceModifier.width(10.dp))
