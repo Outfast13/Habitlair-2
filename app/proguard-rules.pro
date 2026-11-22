@@ -1,0 +1,5 @@
+-keepattributes *Annotation*, InnerClasses
+-dontwarn kotlinx.serialization.**
+-keep,includedescriptorclasses class com.habitlair.app.**$$serializer { *; }
+-keepclassmembers class com.habitlair.app.** { *** Companion; }
+-keepclasseswithmembers class com.habitlair.app.** { kotlinx.serialization.KSerializer serializer(...); }

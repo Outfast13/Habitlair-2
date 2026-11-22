@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">HabitLair</string>
+    <string name="widget_desc">Today\'s habits with quick check-off</string>
+</resources>
