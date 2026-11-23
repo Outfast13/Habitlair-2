@@ -4,21 +4,27 @@ Native Android habit, task, journal and Pomodoro app with a bring-your-own-key A
 Kotlin · Jetpack Compose · Material 3 (Material You) · MVVM · Room · DataStore · WorkManager/AlarmManager · Glance widget.
 
 ## Build
-1. Open this folder in Android Studio (Ladybug or newer, JDK 17). It generates the Gradle wrapper and syncs.
-2. Run the `app` configuration on a device/emulator (API 26+).
-   Or from a terminal with Gradle 8.9+: `gradle :app:assembleDebug`.
+- **GitHub:** push to GitHub; `.github/workflows/build.yml` builds a debug APK and uploads it as the `HabitLair-debug-apk` artifact (Actions tab → run → Artifacts).
+  It also tries an R8-optimised APK (`HabitLair-optimised-apk`), which is much smoother than debug.
+- **Android Studio:** open this folder (JDK 17), let it sync, run `app`.
+- **Terminal:** Gradle 8.9+ → `gradle :app:assembleDebug`.
+
+## Using it
+- Tabs: Today, Tasks, Journal, Timer, AI. Settings is the gear on Today; categories and AI change history live there.
+- Tap a habit or task row to tick it. Long-press to select, then Edit, Move (up/down), Details or Delete.
+- Home-screen widget: tap a row to tick it; the circle on the right shows the state.
+- First launch asks for notifications, exact alarms and (optional) microphone; each can be allowed or skipped.
 
 ## Layout
-- `data/`   Room entities and DAOs, DataStore settings, encrypted API-key store, repository, backup/restore, streaks
-- `ai/`     HTTP client (Gemini, OpenAI, OpenRouter, custom), tolerant JSON parser, offline generator, AI service
-- `work/`   AlarmManager scheduler, notification channels, receivers (reminder, action, boot), WorkManager maintenance worker
-- `widget/` Glance home-screen widget with tap-to-check
+- `data/`   Room entities and DAOs, DataStore settings, encrypted API-key store, repository, zip backup/restore, streaks
+- `ai/`     HTTP client (Gemini, OpenAI, OpenRouter, custom), tolerant JSON parser, chat proposals, apply and undo, offline generator
+- `work/`   AlarmManager scheduler, notification channels, receivers, WorkManager maintenance worker
+- `widget/` Glance home-screen widget
 - `timer/`  Pomodoro engine (app-scoped)
-- `ui/`     Compose screens, editors, view models, theme
+- `ui/`     Compose screens, editors, onboarding, view models, theme
 
 ## Notes
 - API keys live in EncryptedSharedPreferences; they only enter a backup if you tick "Include AI API keys" on export.
-- Backups are .zip files (backup.json + media/) with everything: habits and history, tasks, journal, categories, Pomodoro data, AI chat and change log, settings, attachments and optionally the AI API keys (stored unencrypted inside the zip). Old v1 .json backups can still be imported.
-- The AI coach never changes data until you confirm a proposal; every applied proposal is logged and can be undone (Settings → AI change history).
-- Exact alarms need the "Alarms & reminders" permission on Android 12+ (Settings has a shortcut); otherwise reminders fire inexactly.
+- Backups are .zip files (backup.json + media/) with everything, including attachments and AI chat history. Old .json backups still import.
+- The AI coach never changes data until you confirm a proposal; each applied proposal is logged and can be undone.
 - Cleartext HTTP is enabled so a custom endpoint such as a LAN Ollama server works.

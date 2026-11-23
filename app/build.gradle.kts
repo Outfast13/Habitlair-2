@@ -18,8 +18,10 @@ android {
     }
     buildTypes {
         release {
+            // R8-shrunk and optimised: much smoother than the debug build. Signed with the debug key so it installs directly.
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }

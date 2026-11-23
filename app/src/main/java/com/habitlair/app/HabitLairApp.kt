@@ -30,6 +30,8 @@ class AppContainer(app: Application) {
     val ai by lazy { AiService(db, settings, secure, AiClient()) }
     val pomodoro = PomodoroEngine(app, scope, repo, settings, scheduler)
     val applier by lazy { AiApplier(repo) }
+    /** Text handed from other screens (e.g. Journal) to the AI chat input. */
+    val chatPrompt = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
     val backup by lazy { BackupManager(app, db, settings, secure, scheduler, media) }
 }
 
@@ -45,6 +47,7 @@ class HabitLairApp : Application() {
             "maintenance", ExistingPeriodicWorkPolicy.KEEP,
             PeriodicWorkRequestBuilder<MaintenanceWorker>(6, TimeUnit.HOURS).build()
         )
+        container.scope.launch(Dispatchers.IO) { runCatching { container.secure } }   // warm up the Keystore off the main thread
         container.scope.launch { container.scheduler.rescheduleAll() }
     }
 }

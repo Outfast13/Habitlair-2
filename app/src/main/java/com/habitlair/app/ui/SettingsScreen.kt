@@ -60,9 +60,7 @@ fun SettingsScreen(nav: NavController) {
         Column(Modifier.padding(pv).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
                 Column {
-                    ShortcutRow("AI coach chat", "Talk through your routine; changes only happen after you confirm", Icons.Filled.AutoAwesome) { nav.navigate("chat") }
                     ShortcutRow("AI change history", "Review and undo anything the AI changed", Icons.Filled.History) { nav.navigate("aihistory") }
-                    ShortcutRow("Habits", "Reorder, select and manage all habits", Icons.Filled.EmojiEvents) { nav.navigate("habits") }
                     ShortcutRow("Categories", "Group your habits", Icons.Filled.Category) { nav.navigate("categories") }
                 }
             }
@@ -115,7 +113,11 @@ private fun AiSection(s: AppSettings, vm: SettingsViewModel) {
     val c = LocalContainer.current
     var provider by remember { mutableStateOf(s.provider) }
     val models = remember { mutableStateMapOf<Provider, String>().apply { Provider.entries.forEach { put(it, s.modelFor(it)) } } }
-    val keys = remember { mutableStateMapOf<Provider, String>().apply { Provider.entries.forEach { put(it, c.secure.get(it)) } } }
+    val keys = remember { mutableStateMapOf<Provider, String>() }
+    LaunchedEffect(Unit) {
+        val loaded = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { Provider.entries.associateWith { c.secure.get(it) } }
+        keys.putAll(loaded)
+    }
     var base by remember { mutableStateOf(s.customBaseUrl.ifBlank { Provider.CUSTOM.defaultBase }) }
     var prompt by remember { mutableStateOf(s.systemPrompt) }
     var temp by remember { mutableFloatStateOf(s.temperature) }

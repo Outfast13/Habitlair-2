@@ -126,7 +126,8 @@ data class Attachment(
 data class AttachmentChanges(val added: List<Attachment> = emptyList(), val removed: List<Attachment> = emptyList())
 
 fun Habit.isScheduled(epochDay: Long): Boolean {
-    val bit = LocalDate.ofEpochDay(epochDay).dayOfWeek.value - 1
+    // 1970-01-01 was a Thursday, so (epochDay + 3) mod 7 gives Monday = 0 without allocating a LocalDate.
+    val bit = Math.floorMod(epochDay + 3, 7L).toInt()
     return (daysMask and (1 shl bit)) != 0
 }
 

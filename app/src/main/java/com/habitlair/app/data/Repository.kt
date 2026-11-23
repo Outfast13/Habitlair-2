@@ -10,8 +10,17 @@ import androidx.room.withTransaction
 import com.habitlair.app.ai.ImportBundle
 import com.habitlair.app.widget.HabitWidget
 import com.habitlair.app.work.ReminderScheduler
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
+
+/** New habits slot in by time of day (before the first later-timed habit); otherwise they go to the end. */
+suspend fun AppDatabase.placeHabitOrder(timeMinutes: Int?): Int {
+    val all = habits().all().filter { !it.archived }.sortedWith(compareBy({ it.sortOrder }, { it.id }))
+    val idx = if (timeMinutes == null) -1 else all.indexOfFirst { it.timeMinutes != null && it.timeMinutes > timeMinutes }
+    return if (idx < 0) (all.maxOfOrNull { it.sortOrder } ?: -1) + 1 else { val pos = all[idx].sortOrder; habits().shiftFrom(pos); pos }
+}
 
 data class ImportResult(val habits: Int, val tasks: Int, val subtasks: Int, val presets: Int)
 
@@ -56,7 +65,7 @@ class Repository(
     val sessions = db.pomodoro().observeSessions()
     val presets = db.pomodoro().observePresets()
 
-    suspend fun refreshWidget() { runCatching { HabitWidget().updateAll(ctx) } }
+    suspend fun refreshWidget() { withContext(Dispatchers.Default) { runCatching { HabitWidget().updateAll(ctx) } } }
 
     // ---------- attachments ----------
     suspend fun attachmentsFor(type: String, id: Long): List<Attachment> = db.attachments().forOwner(type, id)
@@ -73,7 +82,7 @@ class Repository(
 
     // ---------- habits ----------
     suspend fun saveHabit(h: Habit, att: AttachmentChanges? = null): Long {
-        val toSave = if (h.id == 0L) h.copy(sortOrder = (db.habits().maxOrder() ?: -1) + 1) else h
+        val toSave = if (h.id == 0L) h.copy(sortOrder = db.placeHabitOrder(h.timeMinutes)) else h
         val id = if (h.id == 0L) db.habits().upsert(toSave) else { db.habits().upsert(toSave); h.id }
         att?.let { commit(Owner.HABIT, id, it) }
         scheduler.syncHabit(id)
@@ -186,10 +195,9 @@ class Repository(
     suspend fun importBundle(b: ImportBundle): ImportResult {
         var subCount = 0
         db.withTransaction {
-            var hOrder = (db.habits().maxOrder() ?: -1) + 1
             b.habits.forEachIndexed { i, p ->
                 db.habits().upsert(Habit(name = p.name, icon = p.icon, colorHex = importColors[i % importColors.size], timeMinutes = p.timeMinutes,
-                    daysMask = p.daysMask, notes = p.notes, sortOrder = hOrder++))
+                    daysMask = p.daysMask, notes = p.notes, sortOrder = db.placeHabitOrder(p.timeMinutes)))
             }
             val today = Dates.today()
             var tOrder = (db.tasks().maxTopOrder() ?: -1) + 1

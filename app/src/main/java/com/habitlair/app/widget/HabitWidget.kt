@@ -138,17 +138,11 @@ private fun WidgetRow(item: WidgetItem) {
     val toggle = actionRunCallback<ToggleItemAction>(
         actionParametersOf(ItemIdKey to item.id, ItemIsTaskKey to item.isTask)
     )
+    // The entire row is the tap target; the circle on the right is just the indicator.
     Row(
-        modifier = GlanceModifier.fillMaxWidth().padding(vertical = 5.dp),
+        modifier = GlanceModifier.fillMaxWidth().padding(vertical = 6.dp).clickable(toggle),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Image(
-            provider = ImageProvider(if (item.done) R.drawable.ic_check_on else R.drawable.ic_check_off),
-            contentDescription = if (item.done) "Completed. Tap to undo" else "Not done. Tap to complete",
-            modifier = GlanceModifier.size(26.dp).clickable(toggle),
-            colorFilter = ColorFilter.tint(if (item.done) GlanceTheme.colors.primary else GlanceTheme.colors.outline)
-        )
-        Spacer(modifier = GlanceModifier.width(10.dp))
         Column(modifier = GlanceModifier.defaultWeight()) {
             Text(
                 text = item.title,
@@ -166,6 +160,13 @@ private fun WidgetRow(item: WidgetItem) {
                 style = TextStyle(fontSize = 11.sp, color = GlanceTheme.colors.onSurfaceVariant)
             )
         }
+        Spacer(modifier = GlanceModifier.width(10.dp))
+        Image(
+            provider = ImageProvider(if (item.done) R.drawable.ic_check_on else R.drawable.ic_check_off),
+            contentDescription = if (item.done) "Completed. Tap to undo" else "Not done. Tap to complete",
+            modifier = GlanceModifier.size(28.dp),
+            colorFilter = ColorFilter.tint(if (item.done) GlanceTheme.colors.primary else GlanceTheme.colors.outline)
+        )
     }
 }
 
@@ -180,6 +181,8 @@ class ToggleItemAction : ActionCallback {
         } else {
             c.repo.toggleHabit(id, Dates.today())
         }
+        // Make sure this widget instance redraws right away, whatever the repository refresh did.
+        HabitWidget().update(context, glanceId)
     }
 }
 

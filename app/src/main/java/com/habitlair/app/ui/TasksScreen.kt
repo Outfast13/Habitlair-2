@@ -3,8 +3,6 @@
 package com.habitlair.app.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,6 +14,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -27,6 +27,7 @@ fun TasksScreen(nav: NavController) {
     val vm = appViewModel { TasksViewModel(it) }
     val hvm = appViewModel { HabitViewModel(it) }
     val c = LocalContainer.current
+    val haptic = LocalHapticFeedback.current
     val tasks by vm.tasks.collectAsStateWithLifecycle()
     val habits by hvm.habits.collectAsStateWithLifecycle()
     var status by rememberSaveable { mutableIntStateOf(0) }
@@ -36,6 +37,7 @@ fun TasksScreen(nav: NavController) {
     var query by rememberSaveable { mutableStateOf("") }
     var sheet by remember { mutableStateOf<Open<TaskUi>?>(null) }
     var selected by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var moveMode by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var addSubFor by remember { mutableStateOf<TaskItem?>(null) }
     val selecting = selected.isNotEmpty()
@@ -53,8 +55,10 @@ fun TasksScreen(nav: NavController) {
     }
     val shownIds = shown.map { it.task.id }
     val allIds = tasks.map { it.task.id }
-    LaunchedEffect(allIds) { selected = selected.filter { it in allIds }.toSet() }
+    LaunchedEffect(allIds) { selected = selected.filter { it in allIds }.toSet(); if (selected.isEmpty()) moveMode = false }
 
+    fun clearSelection() { selected = emptySet(); moveMode = false }
+    fun toggleSel(id: Long) { selected = if (id in selected) selected - id else selected + id; if (selected.isEmpty()) moveMode = false }
     fun move(up: Boolean) { moveSelection(allIds, shownIds, selected, up)?.let { vm.reorder(it) } }
 
     Scaffold(
@@ -62,15 +66,27 @@ fun TasksScreen(nav: NavController) {
         topBar = {
             if (selecting) TopAppBar(
                 windowInsets = WindowInsets(0, 0, 0, 0),
-                navigationIcon = { IconButton({ selected = emptySet() }) { Icon(Icons.Filled.Close, "Exit selection") } },
-                title = { Text("${selected.size} selected") },
+                navigationIcon = { IconButton({ clearSelection() }) { Icon(Icons.Filled.Close, "Exit selection") } },
+                title = {
+                    if (moveMode) Text("Move ${selected.size}")
+                    else Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton({ tasks.firstOrNull { it.task.id == selected.first() }?.let { sheet = Open(it) } }, enabled = selected.size == 1) {
+                            Icon(Icons.Filled.Edit, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("Edit")
+                        }
+                        TextButton({ moveMode = true }, enabled = sort == 0) {
+                            Icon(Icons.Filled.SwapVert, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("Move")
+                        }
+                    }
+                },
                 actions = {
-                    IconButton({ selected = shownIds.toSet() }) { Icon(Icons.Filled.SelectAll, "Select all") }
-                    IconButton({ move(true) }, enabled = sort == 0) { Icon(Icons.Filled.KeyboardArrowUp, "Move up") }
-                    IconButton({ move(false) }, enabled = sort == 0) { Icon(Icons.Filled.KeyboardArrowDown, "Move down") }
-                    val allDone = tasks.filter { it.task.id in selected }.all { it.task.done }
-                    IconButton({ vm.setDoneMany(selected, !allDone) }) { Icon(if (allDone) Icons.Filled.Undo else Icons.Filled.DoneAll, if (allDone) "Reopen" else "Mark done") }
-                    IconButton({ confirmDelete = true }) { Icon(Icons.Filled.Delete, "Delete selected") }
+                    if (moveMode) {
+                        IconButton({ move(true) }) { Icon(Icons.Filled.KeyboardArrowUp, "Move up") }
+                        IconButton({ move(false) }) { Icon(Icons.Filled.KeyboardArrowDown, "Move down") }
+                        TextButton({ moveMode = false }) { Text("Done") }
+                    } else {
+                        IconButton({ selected = shownIds.toSet() }) { Icon(Icons.Filled.SelectAll, "Select all") }
+                        IconButton({ confirmDelete = true }) { Icon(Icons.Filled.Delete, "Delete selected") }
+                    }
                 }
             ) else TopAppBar(windowInsets = WindowInsets(0, 0, 0, 0), title = { Text("Tasks", style = MaterialTheme.typography.headlineMedium) })
         },
@@ -90,26 +106,17 @@ fun TasksScreen(nav: NavController) {
                 Text("Sort", style = MaterialTheme.typography.labelLarge)
                 listOf("Manual", "Due date", "Priority").forEachIndexed { i, l -> FilterChip(sort == i, { sort = i }, { Text(l) }) }
             }
-            if (!selecting && tasks.size > 1) Text("Long-press a task to select, reorder or delete.", Modifier.padding(horizontal = 16.dp, vertical = 2.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (!selecting && tasks.isNotEmpty()) Text("Tap a task to tick it. Long-press to edit, move or delete.", Modifier.padding(horizontal = 16.dp, vertical = 2.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             LazyColumn(contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (shown.isEmpty()) item { EmptyState(Icons.Filled.TaskAlt, if (tasks.isEmpty()) "No tasks yet. Tap + to add one." else "No tasks match your filters.") }
                 items(shown, key = { it.task.id }) { t ->
-                    val isSel = t.task.id in selected
-                    val toggleSel = { selected = if (isSel) selected - t.task.id else selected + t.task.id }
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = if (isSel) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer),
-                        modifier = Modifier.fillMaxWidth().combinedClickable(
-                            onClick = { if (selecting) toggleSel() else sheet = Open(t) },
-                            onLongClick = { toggleSel() }
-                        )
-                    ) {
+                    val id = t.task.id
+                    val isSel = id in selected
+                    Card(colors = CardDefaults.cardColors(containerColor = if (isSel) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer), modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(bottom = 6.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (selecting) Checkbox(isSel, { toggleSel() }, Modifier.padding(start = 8.dp))
-                                Box(Modifier.weight(1f)) {
-                                    TaskRow(t, 0, onToggle = { if (selecting) toggleSel() else vm.setDone(t.task.id, !t.task.done) }, onClick = null)
-                                }
-                            }
+                            TaskRow(t, false,
+                                onClick = { if (selecting) toggleSel(id) else vm.setDone(id, !t.task.done) },
+                                onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); toggleSel(id) })
                             Column(Modifier.padding(start = 72.dp, end = 16.dp)) {
                                 val meta = buildList {
                                     t.task.dueEpochDay?.let { add(Dates.fmtDate(it)) }
@@ -123,11 +130,11 @@ fun TasksScreen(nav: NavController) {
                                     LinearProgressIndicator(progress = { t.subs.count { it.done }.toFloat() / t.subs.size }, Modifier.fillMaxWidth())
                                 }
                                 t.subs.forEach { s ->
-                                    Row(Modifier.fillMaxWidth().clickable(enabled = !selecting) { vm.setDone(s.id, !s.done) }, verticalAlignment = Alignment.CenterVertically) {
-                                        Checkbox(s.done, { vm.setDone(s.id, it) }, enabled = !selecting)
-                                        Text(s.title + (s.estimateMinutes?.let { " · ${it}m" } ?: ""), style = MaterialTheme.typography.bodyMedium,
+                                    Row(Modifier.fillMaxWidth().clickable(enabled = !selecting) { vm.setDone(s.id, !s.done) }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Text(s.title + (s.estimateMinutes?.let { " · ${it}m" } ?: ""), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium,
                                             textDecoration = if (s.done) TextDecoration.LineThrough else null,
                                             color = if (s.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
+                                        CheckCircle(s.done, size = 26.dp)
                                     }
                                 }
                                 if (!selecting) TextButton({ addSubFor = t.task }, contentPadding = PaddingValues(horizontal = 4.dp)) {
@@ -143,8 +150,8 @@ fun TasksScreen(nav: NavController) {
     sheet?.let { s ->
         TaskEditorSheet(
             s.value?.task, s.value?.subs.orEmpty(), habits.map { it.habit }, s.value?.focusMin ?: 0,
-            { t, subs, a -> vm.save(t, subs, a); sheet = null },
-            s.value?.let { u -> { vm.delete(u.task.id); sheet = null } },
+            { t, subs, a -> vm.save(t, subs, a); sheet = null; clearSelection() },
+            s.value?.let { u -> { vm.delete(u.task.id); sheet = null; clearSelection() } },
             { t -> c.pomodoro.setLink(null, t.id); sheet = null; nav.goTab("timer") },
             { sheet = null }
         )
@@ -160,5 +167,5 @@ fun TasksScreen(nav: NavController) {
         )
     }
     if (confirmDelete) ConfirmDialog("Delete ${selected.size} task(s)?", "Their sub-tasks will be removed too.", "Delete",
-        { vm.deleteMany(selected); selected = emptySet(); confirmDelete = false }, { confirmDelete = false })
+        { vm.deleteMany(selected); clearSelection(); confirmDelete = false }, { confirmDelete = false })
 }

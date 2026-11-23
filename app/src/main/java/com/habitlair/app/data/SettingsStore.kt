@@ -65,7 +65,9 @@ data class AppSettings(
     val focusMin: Int = 25,
     val breakMin: Int = 5,
     val longBreakMin: Int = 15,
-    val cyclesBeforeLong: Int = 4
+    val cyclesBeforeLong: Int = 4,
+
+    val onboarded: Boolean = false
 ) {
     fun modelFor(p: Provider): String = models[p]?.takeIf { it.isNotBlank() } ?: p.defaultModel
     val baseUrl: String
@@ -104,6 +106,7 @@ class SettingsStore(ctx: Context) {
         val brk = intPreferencesKey("break")
         val longBrk = intPreferencesKey("long_break")
         val cycles = intPreferencesKey("cycles")
+        val onboarded = booleanPreferencesKey("onboarded")
         fun model(p: Provider) = stringPreferencesKey("model_${p.name}")
     }
 
@@ -131,7 +134,8 @@ class SettingsStore(ctx: Context) {
             focusMin = this[K.focus] ?: d.focusMin,
             breakMin = this[K.brk] ?: d.breakMin,
             longBreakMin = this[K.longBrk] ?: d.longBreakMin,
-            cyclesBeforeLong = this[K.cycles] ?: d.cyclesBeforeLong
+            cyclesBeforeLong = this[K.cycles] ?: d.cyclesBeforeLong,
+            onboarded = this[K.onboarded] ?: d.onboarded
         )
     }
 
@@ -155,6 +159,7 @@ class SettingsStore(ctx: Context) {
         this[K.brk] = s.breakMin
         this[K.longBrk] = s.longBreakMin
         this[K.cycles] = s.cyclesBeforeLong
+        this[K.onboarded] = s.onboarded
     }
 }
 

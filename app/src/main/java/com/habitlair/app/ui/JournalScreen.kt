@@ -23,6 +23,7 @@ import com.habitlair.app.data.*
 @Composable
 fun JournalScreen(nav: NavController) {
     val vm = appViewModel { JournalViewModel(it) }
+    val container = LocalContainer.current
     val entries by vm.entries.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
     var mood by rememberSaveable { mutableIntStateOf(0) }
@@ -40,7 +41,7 @@ fun JournalScreen(nav: NavController) {
             TopAppBar(windowInsets = WindowInsets(0, 0, 0, 0), 
                 title = { Text("Journal", style = MaterialTheme.typography.headlineMedium) },
                 actions = {
-                    IconButton({ nav.navigate("chat?prompt=" + android.net.Uri.encode("Review my recent journal entries and habit streaks and suggest adjustments.")) }) {
+                    IconButton({ container.chatPrompt.value = "Review my recent journal entries and habit streaks and suggest adjustments."; nav.goTab("chat") }) {
                         Icon(Icons.Filled.AutoAwesome, "Ask the AI coach about my journal and streaks")
                     }
                 }

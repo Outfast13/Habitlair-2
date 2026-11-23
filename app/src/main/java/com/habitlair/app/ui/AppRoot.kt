@@ -3,7 +3,9 @@ package com.habitlair.app.ui
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.ime
@@ -34,18 +36,20 @@ private val tabs = listOf(
     Tab("today", "Today", Icons.Filled.Today),
     Tab("tasks", "Tasks", Icons.Filled.TaskAlt),
     Tab("journal", "Journal", Icons.Filled.Book),
-    Tab("timer", "Timer", Icons.Filled.Timer)
+    Tab("timer", "Timer", Icons.Filled.Timer),
+    Tab("chat", "AI", Icons.Filled.AutoAwesome)
 )
 
 @Composable
 fun AppRoot() {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
-    val route = entry?.destination?.route
+    val route = entry?.destination?.route?.substringBefore("?")
     val anim = LocalAnim.current
-    val imeOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-    val enter = if (anim) fadeIn() else EnterTransition.None
-    val exit = if (anim) fadeOut() else ExitTransition.None
+    val density = LocalDensity.current
+    val imeOpen by remember { derivedStateOf { WindowInsets.ime.getBottom(density) > 0 } }
+    val enter = if (anim) fadeIn(tween(110)) else EnterTransition.None
+    val exit = ExitTransition.None
 
     Scaffold(
         bottomBar = {
@@ -65,12 +69,9 @@ fun AppRoot() {
             composable("tasks") { TasksScreen(nav) }
             composable("journal") { JournalScreen(nav) }
             composable("timer") { TimerScreen() }
-            composable("habits") { HabitsScreen(nav) }
             composable("categories") { CategoriesScreen(nav) }
             composable("habit/{id}", listOf(navArgument("id") { type = NavType.LongType })) { HabitDetailScreen(it.arguments?.getLong("id") ?: 0L, nav) }
-            composable("chat?prompt={prompt}", listOf(navArgument("prompt") { type = NavType.StringType; defaultValue = "" })) {
-                AiChatScreen(nav, it.arguments?.getString("prompt") ?: "")
-            }
+            composable("chat") { AiChatScreen(nav) }
             composable("aihistory") { AiHistoryScreen(nav) }
             composable("settings") { SettingsScreen(nav) }
         }

@@ -35,7 +35,7 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun AiChatScreen(nav: NavController, prompt: String) {
+fun AiChatScreen(nav: NavController) {
     val vm = appViewModel { ChatViewModel(it) }
     val messages by vm.messages.collectAsStateWithLifecycle()
     val sending by vm.sending.collectAsStateWithLifecycle()
@@ -45,7 +45,10 @@ fun AiChatScreen(nav: NavController, prompt: String) {
     val snack = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
-    var input by rememberSaveable { mutableStateOf(prompt) }
+    val container = LocalContainer.current
+    val handoff by container.chatPrompt.collectAsStateWithLifecycle()
+    var input by rememberSaveable { mutableStateOf("") }
+    LaunchedEffect(handoff) { handoff?.let { input = it; container.chatPrompt.value = null } }
     var original by remember { mutableStateOf<String?>(null) }
     var rewriting by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
@@ -64,7 +67,6 @@ fun AiChatScreen(nav: NavController, prompt: String) {
             TopAppBar(
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Column { Text("AI coach"); Text(status, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1) } },
-                navigationIcon = { IconButton({ nav.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
                 actions = {
                     IconButton({ nav.navigate("aihistory") }) { Icon(Icons.Filled.History, "AI change history") }
                     IconButton({ confirmClear = true }, enabled = messages.isNotEmpty()) { Icon(Icons.Filled.DeleteSweep, "Clear conversation") }

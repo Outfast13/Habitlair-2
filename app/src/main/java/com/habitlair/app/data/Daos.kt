@@ -22,6 +22,7 @@ interface HabitDao {
     fun observe(): Flow<List<Habit>>
     @Query("SELECT * FROM habits") suspend fun all(): List<Habit>
     @Query("SELECT MAX(sortOrder) FROM habits") suspend fun maxOrder(): Int?
+    @Query("UPDATE habits SET sortOrder = sortOrder + 1 WHERE sortOrder >= :pos") suspend fun shiftFrom(pos: Int)
     @Query("UPDATE habits SET sortOrder = :o WHERE id = :id") suspend fun setOrder(id: Long, o: Int)
     @Query("SELECT * FROM habits WHERE id = :id") suspend fun get(id: Long): Habit?
     @Upsert suspend fun upsert(h: Habit): Long

@@ -90,13 +90,11 @@ fun Tag(text: String, color: Color, icon: ImageVector? = null) {
 fun NeutralTag(text: String, icon: ImageVector? = null) =
     Tag(text, MaterialTheme.colorScheme.onSurfaceVariant, icon)
 
+/** Purely visual: the whole row is the tap target, so this circle itself isn't clickable. */
 @Composable
-fun CheckCircle(done: Boolean, enabled: Boolean, onClick: () -> Unit) {
+fun CheckCircle(done: Boolean, enabled: Boolean = true, size: Dp = 38.dp) {
     val bg = if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest
-    Box(
-        Modifier.size(38.dp).clip(CircleShape).background(bg).clickable(enabled = enabled, onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
+    Box(Modifier.size(size).clip(CircleShape).background(bg), contentAlignment = Alignment.Center) {
         when {
             done -> Icon(Icons.Filled.Check, "Completed", tint = MaterialTheme.colorScheme.onPrimary)
             !enabled -> Icon(Icons.Filled.Schedule, "Upcoming", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))

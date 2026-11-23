@@ -83,8 +83,8 @@ class AiApplier(private val repo: Repository) {
                 if (idx !in selected) return@forEachIndexed
                 when (a) {
                     is CreateHabit -> {
-                        val order = (db.habits().maxOrder() ?: -1) + 1
-                        val id = db.habits().upsert(Habit(name = a.plan.name, icon = a.plan.icon, colorHex = colors[order % colors.size],
+                        val order = db.placeHabitOrder(a.plan.timeMinutes)
+                        val id = db.habits().upsert(Habit(name = a.plan.name, icon = a.plan.icon, colorHex = colors[order.coerceAtLeast(0) % colors.size],
                             timeMinutes = a.plan.timeMinutes, daysMask = a.plan.daysMask, notes = a.plan.notes, sortOrder = order))
                         inverses += InvDeleteHabit(id); habitsTouched += id; applied++
                     }

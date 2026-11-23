@@ -1,6 +1,8 @@
 package com.habitlair.app.ai
 
 import com.habitlair.app.data.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 data class AiOutcome<T>(val value: T, val source: String, val note: String?, val offline: Boolean)
 
@@ -14,10 +16,10 @@ class AiService(
         AiConfig(s.provider, s.baseUrl, s.modelFor(s.provider), secure.get(s.provider), s.temperature)
 
     /** Null config means AI can't be used (no key). */
-    private suspend fun activeConfig(): Pair<AppSettings, AiConfig?> {
+    private suspend fun activeConfig(): Pair<AppSettings, AiConfig?> = withContext(Dispatchers.IO) {
         val s = settings.current()
-        val c = configFrom(s)
-        return s to if (c.apiKey.isBlank() && c.provider != Provider.CUSTOM) null else c
+        val c = configFrom(s)   // reads the encrypted key store, so keep it off the main thread
+        s to if (c.apiKey.isBlank() && c.provider != Provider.CUSTOM) null else c
     }
 
     suspend fun status(): String {
