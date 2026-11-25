@@ -7,8 +7,6 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideIntoContainer
-import androidx.compose.animation.slideOutOfContainer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.ime
@@ -88,7 +86,8 @@ fun AppRoot() {
     val route = entry?.destination?.route?.substringBefore("?")
     val anim = LocalAnim.current
     val density = LocalDensity.current
-    val imeOpen by remember { derivedStateOf { WindowInsets.ime.getBottom(density) > 0 } }
+    val imeInsets = WindowInsets.ime
+    val imeOpen by remember(imeInsets, density) { derivedStateOf { imeInsets.getBottom(density) > 0 } }
 
     Scaffold(
         bottomBar = {
