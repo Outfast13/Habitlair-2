@@ -5,10 +5,9 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
-import androidx.glance.appwidget.updateAll
 import androidx.room.withTransaction
 import com.habitlair.app.ai.ImportBundle
-import com.habitlair.app.widget.HabitWidget
+import com.habitlair.app.widget.updateAllWidgets
 import com.habitlair.app.work.ReminderScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -35,12 +34,14 @@ class MediaFiles(private val ctx: Context) {
 
     fun copyIn(uri: Uri, kind: String): Attachment {
         val mime = ctx.contentResolver.getType(uri)
+        val name = displayName(uri)
         val ext = mime?.let { MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
-            ?: when (kind) { MediaKind.PHOTO -> "jpg"; MediaKind.VIDEO -> "mp4"; else -> "m4a" }
+            ?: name?.substringAfterLast('.', "")?.takeIf { it.isNotBlank() && it.length <= 5 }
+            ?: when (kind) { MediaKind.PHOTO -> "jpg"; MediaKind.VIDEO -> "mp4"; MediaKind.AUDIO -> "m4a"; else -> "bin" }
         val f = newFile(ext)
         val input = ctx.contentResolver.openInputStream(uri) ?: throw IllegalStateException("Can't open the selected file")
         input.use { i -> f.outputStream().use { o -> i.copyTo(o) } }
-        return attachmentFor(f, kind, displayName(uri))
+        return attachmentFor(f, kind, name)
     }
 
     private fun displayName(uri: Uri): String? = runCatching {
@@ -65,7 +66,7 @@ class Repository(
     val sessions = db.pomodoro().observeSessions()
     val presets = db.pomodoro().observePresets()
 
-    suspend fun refreshWidget() { withContext(Dispatchers.Default) { runCatching { HabitWidget().updateAll(ctx) } } }
+    suspend fun refreshWidget() { withContext(Dispatchers.Default) { updateAllWidgets(ctx) } }
 
     // ---------- attachments ----------
     suspend fun attachmentsFor(type: String, id: Long): List<Attachment> = db.attachments().forOwner(type, id)

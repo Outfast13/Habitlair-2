@@ -22,6 +22,8 @@ class AiService(
         s to if (c.apiKey.isBlank() && c.provider != Provider.CUSTOM) null else c
     }
 
+    suspend fun isConfigured(): Boolean = activeConfig().second != null
+
     suspend fun status(): String {
         val (s, c) = activeConfig()
         return if (c == null) "No API key for ${s.provider.label}: replies are built on-device (add a key in Settings for real conversation)."

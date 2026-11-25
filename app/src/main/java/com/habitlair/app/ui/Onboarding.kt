@@ -38,11 +38,13 @@ fun OnboardingScreen(onFinish: () -> Unit) {
     var notif by remember { mutableStateOf(Notifier.canPost(ctx)) }
     var exact by remember { mutableStateOf(c.scheduler.canExact()) }
     var mic by remember { mutableStateOf(micGranted(ctx)) }
+    var fullScreen by remember { mutableStateOf(Notifier.fullScreenAllowed(ctx)) }
+    var skippedFull by remember { mutableStateOf(false) }
     var skippedNotif by remember { mutableStateOf(false) }
     var skippedExact by remember { mutableStateOf(false) }
     var skippedMic by remember { mutableStateOf(false) }
 
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { notif = Notifier.canPost(ctx); exact = c.scheduler.canExact(); mic = micGranted(ctx) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { notif = Notifier.canPost(ctx); exact = c.scheduler.canExact(); mic = micGranted(ctx); fullScreen = Notifier.fullScreenAllowed(ctx) }
     val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { notif = Notifier.canPost(ctx); if (!notif) skippedNotif = true }
     val micLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { mic = micGranted(ctx); if (!mic) skippedMic = true }
 
@@ -66,7 +68,7 @@ fun OnboardingScreen(onFinish: () -> Unit) {
             )
             PermissionCard(
                 icon = Icons.Filled.Alarm, title = "Exact alarms",
-                why = "Lets reminders fire at the exact minute. Without it they can arrive a few minutes late.",
+                why = "Lets reminders and alarms fire at the exact minute. Without it they can arrive a few minutes late.",
                 granted = exact, skipped = skippedExact,
                 note = if (Build.VERSION.SDK_INT < 31) "Already allowed on this Android version." else "Opens a system page where you switch HabitLair on.",
                 onAllow = {
@@ -77,13 +79,25 @@ fun OnboardingScreen(onFinish: () -> Unit) {
                 onSkip = { skippedExact = true }
             )
             PermissionCard(
+                icon = Icons.Filled.Alarm, title = "Full-screen alarms",
+                why = "Lets a ringing alarm take over the screen, even on the lock screen. Without it the alarm still rings but only as a notification.",
+                granted = fullScreen, skipped = skippedFull,
+                note = if (Build.VERSION.SDK_INT < 34) "Already allowed on this Android version." else "Opens a system page where you switch HabitLair on.",
+                onAllow = {
+                    if (Build.VERSION.SDK_INT >= 34) runCatching {
+                        ctx.startActivity(Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:${ctx.packageName}")))
+                    }
+                },
+                onSkip = { skippedFull = true }
+            )
+            PermissionCard(
                 icon = Icons.Filled.Mic, title = "Microphone (optional)",
-                why = "Only used when you record an audio note on a habit, task or journal entry.",
+                why = "Used for audio notes and for sound in videos you record in the app. Voice typing uses your keyboard's own service.",
                 granted = mic, skipped = skippedMic, note = null,
                 onAllow = { micLauncher.launch(Manifest.permission.RECORD_AUDIO) },
                 onSkip = { skippedMic = true }
             )
-            Text("Photos and videos use the system picker and camera app, so they need no permission.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("The camera asks for its own permission the first time you open it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(4.dp))
             Button(onFinish, Modifier.fillMaxWidth()) { Text("Continue") }
         }

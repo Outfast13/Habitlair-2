@@ -25,7 +25,14 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import com.habitlair.app.ai.AiConfig
 import com.habitlair.app.ai.AiException
+import com.habitlair.app.data.AppSettings
+import com.habitlair.app.data.Provider
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.habitlair.app.ai.AiParser
 import com.habitlair.app.ai.describe
 import com.habitlair.app.data.ChatMessage
@@ -40,6 +47,9 @@ fun AiChatScreen(nav: NavController) {
     val messages by vm.messages.collectAsStateWithLifecycle()
     val sending by vm.sending.collectAsStateWithLifecycle()
     val status by vm.status.collectAsStateWithLifecycle()
+    val configured by vm.configured.collectAsStateWithLifecycle()
+    val appSettings: AppSettings? by LocalContainer.current.settings.flow.collectAsStateWithLifecycle(initialValue = null)
+    var showSetup by remember { mutableStateOf(false) }
     val habitNames by vm.habitNames.collectAsStateWithLifecycle()
     val taskNames by vm.taskNames.collectAsStateWithLifecycle()
     val snack = remember { SnackbarHostState() }
@@ -55,6 +65,8 @@ fun AiChatScreen(nav: NavController) {
 
     LaunchedEffect(Unit) { vm.toasts.collect { snack.showSnackbar(it) } }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refreshStatus() }
+    // First time in the AI tab without a connected AI: ask the person to set one up
+    LaunchedEffect(configured, appSettings?.aiSetupSeen) { if (configured == false && appSettings?.aiSetupSeen == false) showSetup = true }
     LaunchedEffect(messages.size, sending) {
         val n = messages.size + if (sending) 1 else 0
         if (n > 0) listState.animateScrollToItem(n - 1)
@@ -83,6 +95,8 @@ fun AiChatScreen(nav: NavController) {
                             placeholder = { Text("Tell me about your routine or goals…") }, maxLines = 6,
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
                             trailingIcon = {
+                              Row(verticalAlignment = Alignment.CenterVertically) {
+                                DictateButton { input = appendSpoken(input, it); original = null }
                                 if (rewriting) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                                 else IconButton({
                                     if (input.isBlank()) return@IconButton
@@ -97,6 +111,7 @@ fun AiChatScreen(nav: NavController) {
                                         finally { rewriting = false }
                                     }
                                 }, enabled = input.isNotBlank(), modifier = Modifier.size(36.dp)) { Icon(Icons.Filled.AutoFixHigh, "Improve my prompt with AI", Modifier.size(20.dp)) }
+                              }
                             }
                         )
                         Spacer(Modifier.width(8.dp))
@@ -106,7 +121,9 @@ fun AiChatScreen(nav: NavController) {
             }
         }
     ) { pv ->
-        LazyColumn(Modifier.padding(pv).fillMaxSize(), state = listState, contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+      Column(Modifier.padding(pv)) {
+        if (configured == false) NoAiBanner { showSetup = true }
+        LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState, contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (messages.isEmpty()) item {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Chat with your coach", style = MaterialTheme.typography.titleLarge)
@@ -129,6 +146,12 @@ fun AiChatScreen(nav: NavController) {
                 }
             }
         }
+      }
+    }
+    if (showSetup) AiSetupSheet { saved ->
+        showSetup = false
+        scope.launch { container.settings.update { it.copy(aiSetupSeen = true) } }
+        if (saved) vm.refreshStatus()
     }
     if (confirmClear) ConfirmDialog("Clear conversation?", "Messages are removed. Changes the AI already applied stay, and can still be undone from AI change history.", "Clear",
         { vm.clearChat(); confirmClear = false }, { confirmClear = false })
@@ -212,5 +235,89 @@ fun AiHistoryScreen(nav: NavController) {
     confirm?.let { id ->
         ConfirmDialog("Undo this change?", "Everything this change created is removed, and anything it edited or deleted is restored to how it was.", "Undo",
             { vm.undo(id); confirm = null }, { confirm = null })
+    }
+}
+
+@Composable
+private fun NoAiBanner(onSetup: () -> Unit) {
+    Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.CloudOff, null, tint = MaterialTheme.colorScheme.onErrorContainer)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text("No AI is connected", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                Text("Replies come from simple built-in rules, not a real model, so there is no real conversation yet. Connect your own AI to unlock it.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
+            }
+            TextButton(onSetup) { Text("Set up") }
+        }
+    }
+}
+
+/** Compact first-run setup: pick a provider, paste a key, test it, save it. */
+@Composable
+private fun AiSetupSheet(onClose: (saved: Boolean) -> Unit) {
+    val c = LocalContainer.current
+    val scope = rememberCoroutineScope()
+    var provider by remember { mutableStateOf(Provider.GEMINI) }
+    var key by remember { mutableStateOf("") }
+    var model by remember { mutableStateOf(Provider.GEMINI.defaultModel) }
+    var base by remember { mutableStateOf(Provider.CUSTOM.defaultBase) }
+    var show by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    var failed by remember { mutableStateOf(false) }
+
+    suspend fun save() {
+        withContext(Dispatchers.IO) { c.secure.set(provider, key.trim()) }
+        c.settings.update { it.copy(provider = provider, models = it.models + (provider to model.trim()), customBaseUrl = if (provider == Provider.CUSTOM) base.trim() else it.customBaseUrl, aiSetupSeen = true) }
+    }
+
+    LairSheet({ onClose(false) }) {
+        Text("Connect your AI", style = MaterialTheme.typography.titleLarge)
+        Text("HabitLair uses your own AI account (bring your own key). The key is stored encrypted on this phone only.", style = MaterialTheme.typography.bodyMedium)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Provider.entries.forEach { p -> FilterChip(provider == p, { provider = p; model = p.defaultModel; message = null; failed = false }, { Text(p.label) }) }
+        }
+        if (provider == Provider.CUSTOM) OutlinedTextField(base, { base = it }, label = { Text("Base URL (OpenAI-compatible)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(
+            key, { key = it.trim() }, label = { Text("API key" + if (provider == Provider.CUSTOM) " (optional)" else "") }, singleLine = true,
+            visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(),
+            modifier = Modifier.fillMaxWidth(),
+            trailingIcon = { IconButton({ show = !show }) { Icon(if (show) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, if (show) "Hide key" else "Show key") } }
+        )
+        if (provider.models.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            provider.models.take(4).forEach { m -> FilterChip(model == m, { model = m }, { Text(m) }) }
+        }
+        OutlinedTextField(model, { model = it }, label = { Text("Model ID") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        message?.let {
+            Text(it, color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium)
+        }
+        Button(
+            enabled = !busy && (key.isNotBlank() || provider == Provider.CUSTOM) && model.isNotBlank(),
+            modifier = Modifier.fillMaxWidth(),
+            onClick = {
+                busy = true; message = null; failed = false
+                scope.launch {
+                    try {
+                        val cfg = AiConfig(provider, if (provider == Provider.CUSTOM) base.trim() else provider.defaultBase, model.trim(), key.trim(), 0.7f)
+                        val r = c.ai.test(cfg)
+                        save()
+                        message = "Connected · ${r.model} · ${r.ms} ms"
+                        busy = false
+                        onClose(true)
+                    } catch (e: AiException) {
+                        failed = true; message = e.describe(); busy = false
+                    } catch (e: Exception) {
+                        failed = true; message = "Unexpected error: ${e.message}"; busy = false
+                    }
+                }
+            }
+        ) {
+            if (busy) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary); Spacer(Modifier.width(8.dp)) }
+            Text(if (busy) "Testing…" else "Test and save")
+        }
+        if (failed) OutlinedButton({ scope.launch { save(); onClose(true) } }, Modifier.fillMaxWidth()) { Text("Save anyway") }
+        TextButton({ onClose(false) }, Modifier.fillMaxWidth()) { Text("Skip for now") }
     }
 }

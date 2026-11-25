@@ -14,3 +14,8 @@
 -dontwarn javax.annotation.concurrent.**
 -dontwarn com.google.api.client.**
 -dontwarn org.joda.time.**
+
+# Alarm service/activity and widget receivers are referenced from the manifest
+-keep class com.habitlair.app.work.AlarmService { *; }
+-keep class com.habitlair.app.work.AlarmRingActivity { *; }
+-keep class com.habitlair.app.widget.** { *; }

@@ -16,6 +16,8 @@ import com.habitlair.app.data.ThemeMode
 
 val LocalCompact = staticCompositionLocalOf { false }
 val LocalAnim = staticCompositionLocalOf { true }
+/** Accessibility: show text next to the attachment icons. */
+val LocalIconLabels = staticCompositionLocalOf { false }
 
 private fun accentScheme(a: Accent, dark: Boolean): ColorScheme {
     val p = Color(a.argb)
@@ -67,7 +69,7 @@ fun HabitLairTheme(s: AppSettings, content: @Composable () -> Unit) {
             }
         }
     }
-    CompositionLocalProvider(LocalCompact provides s.compact, LocalAnim provides s.animations) {
+    CompositionLocalProvider(LocalCompact provides s.compact, LocalAnim provides s.animations, LocalIconLabels provides s.labelsOnIcons) {
         MaterialTheme(colorScheme = scheme, content = content)
     }
 }

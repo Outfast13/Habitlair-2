@@ -1,4 +1,6 @@
 <resources>
     <string name="app_name">HabitLair</string>
-    <string name="widget_desc">Today\'s habits with quick check-off</string>
+    <string name="widget_desc_dynamic">Today\'s checklist in your wallpaper colours. Resizes down to 2 icons wide.</string>
+    <string name="widget_desc_midnight">Today\'s checklist, deep blue night theme. Resizes down to 2 icons wide.</string>
+    <string name="widget_desc_sunrise">Today\'s checklist, warm light theme. Resizes down to 2 icons wide.</string>
 </resources>

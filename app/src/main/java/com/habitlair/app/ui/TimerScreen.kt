@@ -2,6 +2,11 @@
 
 package com.habitlair.app.ui
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -51,9 +56,26 @@ fun TimerScreen() {
         LazyColumn(Modifier.padding(pv).fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             item {
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    val prog = if (st.totalMs == 0L) 0f else st.remainingMs.toFloat() / st.totalMs
+                    // The ring is driven frame by frame from the absolute end time, so it glides instead of stepping.
+                    val ring = remember { Animatable(if (st.totalMs == 0L) 0f else st.remainingMs.toFloat() / st.totalMs) }
+                    var secs by remember { mutableIntStateOf(((st.remainingMs + 999) / 1000).toInt()) }
+                    LaunchedEffect(st.running, st.phase, st.totalMs, st.endAtMs, st.remainingMs) {
+                        if (st.running) {
+                            while (true) {
+                                withFrameNanos { }
+                                val rem = (st.endAtMs - System.currentTimeMillis()).coerceAtLeast(0L)
+                                ring.snapTo(if (st.totalMs == 0L) 0f else rem.toFloat() / st.totalMs)
+                                val s = ((rem + 999) / 1000).toInt()
+                                if (s != secs) secs = s
+                            }
+                        } else {
+                            secs = ((st.remainingMs + 999) / 1000).toInt()
+                            ring.animateTo(if (st.totalMs == 0L) 0f else st.remainingMs.toFloat() / st.totalMs, tween(600, easing = FastOutSlowInEasing))
+                        }
+                    }
+                    val prog = ring.value
                     val track = MaterialTheme.colorScheme.surfaceContainerHighest
-                    val col = if (st.phase == Phase.FOCUS) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
+                    val col by animateColorAsState(if (st.phase == Phase.FOCUS) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary, tween(500), label = "ringColor")
                     Box(Modifier.size(250.dp), contentAlignment = Alignment.Center) {
                         Canvas(Modifier.fillMaxSize()) {
                             val sw = 16.dp.toPx()
@@ -61,7 +83,6 @@ fun TimerScreen() {
                             drawArc(track, 0f, 360f, false, Offset(sw / 2, sw / 2), sz, style = Stroke(sw, cap = StrokeCap.Round))
                             drawArc(col, -90f, 360f * prog, false, Offset(sw / 2, sw / 2), sz, style = Stroke(sw, cap = StrokeCap.Round))
                         }
-                        val secs = ((st.remainingMs + 999) / 1000).toInt()
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("%02d:%02d".format(secs / 60, secs % 60), style = MaterialTheme.typography.displayMedium)
                             Text(st.phase.label + " · ${st.focusDone} done", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -70,7 +91,7 @@ fun TimerScreen() {
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         FilledTonalIconButton(vm::reset, Modifier.size(52.dp)) { Icon(Icons.Filled.Replay, "Reset") }
                         FilledIconButton({ if (st.running) vm.pause() else vm.start() }, Modifier.size(72.dp)) {
-                            Icon(if (st.running) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (st.running) "Pause" else "Start", Modifier.size(36.dp))
+                            Crossfade(st.running, animationSpec = tween(220), label = "playPause") { r -> Icon(if (r) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (r) "Pause" else "Start", Modifier.size(36.dp)) }
                         }
                         FilledTonalIconButton(vm::skip, Modifier.size(52.dp)) { Icon(Icons.Filled.SkipNext, "Skip") }
                     }

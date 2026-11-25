@@ -69,6 +69,7 @@ class TasksViewModel(private val c: AppContainer) : ViewModel() {
 
 class JournalViewModel(private val c: AppContainer) : ViewModel() {
     val entries = c.repo.journal.stateIn(viewModelScope, lazily, emptyList())
+    val withMedia = c.db.attachments().observeJournalOwners().map { it.toSet() }.stateIn(viewModelScope, lazily, emptySet<Long>())
     fun save(e: JournalEntry, changes: AttachmentChanges) { viewModelScope.launch { c.repo.saveJournal(e, changes) } }
     fun delete(id: Long) { viewModelScope.launch { c.repo.deleteJournal(id) } }
     suspend fun attachments(id: Long) = c.repo.attachmentsFor(Owner.JOURNAL, id)
@@ -187,10 +188,12 @@ class ChatViewModel(private val c: AppContainer) : ViewModel() {
     val taskNames = c.repo.tasks.map { l -> l.associate { it.id to it.title } }.stateIn(viewModelScope, lazily, emptyMap())
     val sending = MutableStateFlow(false)
     val status = MutableStateFlow("")
+    /** null while loading; false means no API key is set */
+    val configured = MutableStateFlow<Boolean?>(null)
     val toasts = MutableSharedFlow<String>(extraBufferCapacity = 8)
 
     init { refreshStatus() }
-    fun refreshStatus() { viewModelScope.launch { status.value = c.ai.status() } }
+    fun refreshStatus() { viewModelScope.launch { status.value = c.ai.status(); configured.value = c.ai.isConfigured() } }
 
     suspend fun rewrite(text: String): String = c.ai.rewritePrompt(text)
 

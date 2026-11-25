@@ -89,6 +89,7 @@ interface PomodoroDao {
 interface AttachmentDao {
     @Query("SELECT * FROM attachments WHERE ownerType = :type AND ownerId = :id ORDER BY id") suspend fun forOwner(type: String, id: Long): List<Attachment>
     @Query("SELECT * FROM attachments") suspend fun all(): List<Attachment>
+    @Query("SELECT ownerId FROM attachments WHERE ownerType = 'journal'") fun observeJournalOwners(): Flow<List<Long>>
     @Insert suspend fun insert(a: Attachment): Long
     @Query("DELETE FROM attachments WHERE id = :id") suspend fun delete(id: Long)
     @Query("DELETE FROM attachments WHERE ownerType = :type AND ownerId = :id") suspend fun deleteForOwner(type: String, id: Long)

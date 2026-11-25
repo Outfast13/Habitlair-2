@@ -67,7 +67,11 @@ data class AppSettings(
     val longBreakMin: Int = 15,
     val cyclesBeforeLong: Int = 4,
 
-    val onboarded: Boolean = false
+    val onboarded: Boolean = false,
+    val aiSetupSeen: Boolean = false,
+    val labelsOnIcons: Boolean = false,
+    val alarmRings: Boolean = true,
+    val snoozeMinutes: Int = 10
 ) {
     fun modelFor(p: Provider): String = models[p]?.takeIf { it.isNotBlank() } ?: p.defaultModel
     val baseUrl: String
@@ -107,6 +111,10 @@ class SettingsStore(ctx: Context) {
         val longBrk = intPreferencesKey("long_break")
         val cycles = intPreferencesKey("cycles")
         val onboarded = booleanPreferencesKey("onboarded")
+        val aiSetupSeen = booleanPreferencesKey("ai_setup_seen")
+        val labels = booleanPreferencesKey("labels_on_icons")
+        val alarmRings = booleanPreferencesKey("alarm_rings")
+        val snooze = intPreferencesKey("snooze_min")
         fun model(p: Provider) = stringPreferencesKey("model_${p.name}")
     }
 
@@ -135,7 +143,11 @@ class SettingsStore(ctx: Context) {
             breakMin = this[K.brk] ?: d.breakMin,
             longBreakMin = this[K.longBrk] ?: d.longBreakMin,
             cyclesBeforeLong = this[K.cycles] ?: d.cyclesBeforeLong,
-            onboarded = this[K.onboarded] ?: d.onboarded
+            onboarded = this[K.onboarded] ?: d.onboarded,
+            aiSetupSeen = this[K.aiSetupSeen] ?: d.aiSetupSeen,
+            labelsOnIcons = this[K.labels] ?: d.labelsOnIcons,
+            alarmRings = this[K.alarmRings] ?: d.alarmRings,
+            snoozeMinutes = this[K.snooze] ?: d.snoozeMinutes
         )
     }
 
@@ -160,6 +172,10 @@ class SettingsStore(ctx: Context) {
         this[K.longBrk] = s.longBreakMin
         this[K.cycles] = s.cyclesBeforeLong
         this[K.onboarded] = s.onboarded
+        this[K.aiSetupSeen] = s.aiSetupSeen
+        this[K.labels] = s.labelsOnIcons
+        this[K.alarmRings] = s.alarmRings
+        this[K.snooze] = s.snoozeMinutes
     }
 }
 

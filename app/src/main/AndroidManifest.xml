@@ -4,12 +4,21 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <!-- Camera capture uses system camera intents, so no CAMERA permission is declared. -->
+    <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+    <queries>
+        <intent><action android:name="android.speech.action.RECOGNIZE_SPEECH" /></intent>
+    </queries>
 
     <application
         android:name=".HabitLairApp"
@@ -32,8 +41,25 @@
             </intent-filter>
         </activity>
 
+        <!-- Full-screen ringing alarm: shows over the lock screen and wakes the display -->
+        <activity
+            android:name=".work.AlarmRingActivity"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:configChanges="orientation|screenSize|uiMode" />
+
+        <service
+            android:name=".work.AlarmService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
         <receiver android:name=".work.ReminderReceiver" android:exported="false" />
         <receiver android:name=".work.ActionReceiver" android:exported="false" />
+        <receiver android:name=".widget.WidgetActionReceiver" android:exported="false" />
         <receiver android:name=".work.BootReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
@@ -43,13 +69,17 @@
             </intent-filter>
         </receiver>
 
-        <receiver android:name=".widget.HabitWidgetReceiver" android:exported="true">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/habit_widget_info" />
+        <receiver android:name=".widget.DynamicWidgetReceiver" android:exported="true" android:label="HabitLair · Material You">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_dynamic_info" />
+        </receiver>
+        <receiver android:name=".widget.MidnightWidgetReceiver" android:exported="true" android:label="HabitLair · Midnight">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_midnight_info" />
+        </receiver>
+        <receiver android:name=".widget.SunriseWidgetReceiver" android:exported="true" android:label="HabitLair · Sunrise">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_sunrise_info" />
         </receiver>
 
         <provider

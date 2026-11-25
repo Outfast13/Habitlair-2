@@ -19,7 +19,9 @@ data class TimerState(
     val totalMs: Long = 25 * 60_000L,
     val focusDone: Int = 0,
     val habitId: Long? = null,
-    val taskId: Long? = null
+    val taskId: Long? = null,
+    /** Wall-clock end of the running phase (0 when paused/idle); lets the UI animate frame by frame. */
+    val endAtMs: Long = 0L
 )
 
 /** App-scoped so the timer keeps running while you navigate between screens. */
@@ -61,7 +63,7 @@ class PomodoroEngine(
         val s = _state.value
         if (s.running) return
         endAt = System.currentTimeMillis() + s.remainingMs
-        _state.value = s.copy(running = true)
+        _state.value = s.copy(running = true, endAtMs = endAt)
         scheduler.setAt(TYPE_POMODORO, 0, endAt)
         job = scope.launch {
             while (isActive) {
@@ -77,14 +79,14 @@ class PomodoroEngine(
         if (!_state.value.running) return
         job?.cancel()
         scheduler.cancel(TYPE_POMODORO, 0)
-        _state.update { it.copy(running = false, remainingMs = (endAt - System.currentTimeMillis()).coerceAtLeast(0)) }
+        _state.update { it.copy(running = false, endAtMs = 0L, remainingMs = (endAt - System.currentTimeMillis()).coerceAtLeast(0)) }
     }
 
     fun reset() {
         job?.cancel()
         scheduler.cancel(TYPE_POMODORO, 0)
         val t = lengthFor(_state.value.phase)
-        _state.update { it.copy(running = false, remainingMs = t, totalMs = t) }
+        _state.update { it.copy(running = false, endAtMs = 0L, remainingMs = t, totalMs = t) }
     }
 
     fun skip() {
@@ -119,6 +121,6 @@ class PomodoroEngine(
             if (completedFocus) { done++; if (done % cfg.cyclesBeforeLong.coerceAtLeast(1) == 0) Phase.LONG else Phase.SHORT } else Phase.SHORT
         } else Phase.FOCUS
         val t = lengthFor(next)
-        _state.value = s.copy(phase = next, running = false, remainingMs = t, totalMs = t, focusDone = done)
+        _state.value = s.copy(phase = next, running = false, endAtMs = 0L, remainingMs = t, totalMs = t, focusDone = done)
     }
 }

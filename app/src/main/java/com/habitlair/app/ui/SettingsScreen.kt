@@ -37,7 +37,9 @@ import androidx.navigation.NavController
 import com.habitlair.app.MainActivity
 import com.habitlair.app.ai.AiConfig
 import com.habitlair.app.data.*
-import com.habitlair.app.widget.HabitWidgetReceiver
+import com.habitlair.app.widget.DynamicWidgetReceiver
+import com.habitlair.app.widget.MidnightWidgetReceiver
+import com.habitlair.app.widget.SunriseWidgetReceiver
 import com.habitlair.app.work.Notifier
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -66,6 +68,12 @@ fun SettingsScreen(nav: NavController) {
             }
             Section("AI Configuration", Icons.Filled.AutoAwesome, startOpen = false) { AiSection(cur, vm) }
             Section("Theme & UI", Icons.Filled.Palette) { ThemeSection(cur, vm) }
+            Section("Accessibility", Icons.Filled.Accessibility) {
+                SwitchRow("Text labels on attachment buttons", cur.labelsOnIcons,
+                    supporting = "Off: icons only (Media, Camera, Audio, Files). On: icons with their names.") { v -> vm.update { it.copy(labelsOnIcons = v) } }
+                SwitchRow("Animations", cur.animations, supporting = "Turn off for no sliding or fading between screens.") { v -> vm.update { it.copy(animations = v) } }
+                SwitchRow("Compact layout", cur.compact, supporting = "Tighter rows so more fits on screen.") { v -> vm.update { it.copy(compact = v) } }
+            }
             Section("Notifications & Alarms", Icons.Filled.Notifications) { NotificationSection(cur, vm) }
             Section("Backups", Icons.Filled.Backup) { BackupSection(vm) }
             Section("Home-screen widget", Icons.Filled.Widgets) { WidgetSection() }
@@ -149,7 +157,7 @@ private fun AiSection(s: AppSettings, vm: SettingsViewModel) {
     )
 
     if (provider.models.isNotEmpty()) ExposedDropdownMenuBox(modelMenu, { modelMenu = it }) {
-        OutlinedTextField(models[provider].orEmpty(), {}, readOnly = true, label = { Text("Model") }, modifier = Modifier.menuAnchor().fillMaxWidth(),
+        OutlinedTextField(models[provider].orEmpty(), {}, readOnly = true, label = { Text("Model") }, modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(modelMenu) })
         ExposedDropdownMenu(modelMenu, { modelMenu = false }) {
             provider.models.forEach { m -> DropdownMenuItem({ Text(m) }, { models[provider] = m; modelMenu = false }) }
@@ -213,7 +221,8 @@ private fun NotificationSection(s: AppSettings, vm: SettingsViewModel) {
     var granted by remember { mutableStateOf(Notifier.canPost(ctx)) }
     var exact by remember { mutableStateOf(c.scheduler.canExact()) }
     var timeDialog by remember { mutableStateOf(false) }
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { granted = Notifier.canPost(ctx); exact = c.scheduler.canExact() }
+    var fullScreen by remember { mutableStateOf(Notifier.fullScreenAllowed(ctx)) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { granted = Notifier.canPost(ctx); exact = c.scheduler.canExact(); fullScreen = Notifier.fullScreenAllowed(ctx) }
     val perm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted = it }
 
     SwitchRow("Reminders", s.remindersEnabled, supporting = "Master switch for habit and task alarms.") { v -> vm.update(reschedule = true) { it.copy(remindersEnabled = v) } }
@@ -221,7 +230,13 @@ private fun NotificationSection(s: AppSettings, vm: SettingsViewModel) {
         Column(Modifier.weight(1f)) { Text("Default task reminder time"); Text("Used for tasks with a due date but no time.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         OutlinedButton({ timeDialog = true }) { Text(Dates.fmtTime(s.defaultReminderMinutes)) }
     }
-    SwitchRow("Sound", s.sound) { v -> vm.update { it.copy(sound = v) } }
+    SwitchRow("Ring like an alarm", s.alarmRings,
+        supporting = "Plays a looping alarm sound with vibration and a full-screen alarm until you dismiss, snooze or finish. Off: a normal notification.") { v -> vm.update { it.copy(alarmRings = v) } }
+    SectionLabel("Snooze length")
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(5, 10, 15, 20, 30).forEach { m -> FilterChip(s.snoozeMinutes == m, { vm.update { it.copy(snoozeMinutes = m) } }, { Text("$m min") }) }
+    }
+    SwitchRow("Sound (notifications)", s.sound) { v -> vm.update { it.copy(sound = v) } }
     SwitchRow("Vibration", s.vibration) { v -> vm.update { it.copy(vibration = v) } }
     HorizontalDivider()
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -237,6 +252,13 @@ private fun NotificationSection(s: AppSettings, vm: SettingsViewModel) {
         Spacer(Modifier.width(8.dp)); Text("Exact alarms: " + if (exact) "allowed" else "not allowed (reminders may be a few minutes late)", Modifier.weight(1f))
         if (!exact && Build.VERSION.SDK_INT >= 31) TextButton({
             ctx.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${ctx.packageName}")))
+        }) { Text("Allow") }
+    }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Icon(if (fullScreen) Icons.Filled.CheckCircle else Icons.Filled.Warning, null, tint = if (fullScreen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+        Spacer(Modifier.width(8.dp)); Text("Full-screen alarms: " + if (fullScreen) "allowed" else "not allowed (the alarm only shows as a heads-up)", Modifier.weight(1f))
+        if (!fullScreen && Build.VERSION.SDK_INT >= 34) TextButton({
+            ctx.startActivity(Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:${ctx.packageName}")))
         }) { Text("Allow") }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -299,12 +321,17 @@ private fun BackupSection(vm: SettingsViewModel) {
 private fun WidgetSection() {
     val ctx = LocalContext.current
     var msg by remember { mutableStateOf<String?>(null) }
-    Text("Shows today's habits with a progress bar and tap-to-check boxes. It updates whenever habits change.", style = MaterialTheme.typography.bodySmall)
-    Button({
-        val mgr = AppWidgetManager.getInstance(ctx)
+    Text("Three home-screen checklists in different colours. Tap a row to tick it. Each resizes down to 2 icons wide and fills the space you give it.", style = MaterialTheme.typography.bodySmall)
+    val mgr = remember { AppWidgetManager.getInstance(ctx) }
+    fun pin(cls: Class<*>, name: String) {
         msg = if (mgr.isRequestPinAppWidgetSupported) {
-            mgr.requestPinAppWidget(ComponentName(ctx, HabitWidgetReceiver::class.java), null, null); "Confirm on the dialog to place the widget."
-        } else "Your launcher doesn't support pinning from apps. Long-press the home screen, choose Widgets and pick HabitLair."
-    }) { Icon(Icons.Filled.AddToHomeScreen, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Add widget to home screen") }
+            mgr.requestPinAppWidget(ComponentName(ctx, cls), null, null); "Confirm on the dialog to place the $name widget."
+        } else "Your launcher can't pin from apps. Long-press the home screen, choose Widgets and pick HabitLair."
+    }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilledTonalButton({ pin(DynamicWidgetReceiver::class.java, "Material You") }) { Text("Material You") }
+        FilledTonalButton({ pin(MidnightWidgetReceiver::class.java, "Midnight") }) { Text("Midnight") }
+        FilledTonalButton({ pin(SunriseWidgetReceiver::class.java, "Sunrise") }) { Text("Sunrise") }
+    }
     msg?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
 }

@@ -16,7 +16,6 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import androidx.glance.appwidget.updateAll
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.habitlair.app.HabitLairApp
@@ -28,7 +27,7 @@ import com.habitlair.app.data.Dates
 import com.habitlair.app.data.Habit
 import com.habitlair.app.data.Owner
 import com.habitlair.app.data.SettingsStore
-import com.habitlair.app.widget.HabitWidget
+import com.habitlair.app.widget.updateAllWidgets
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -37,11 +36,14 @@ import java.time.ZoneId
 
 const val EXTRA_TYPE = "type"
 const val EXTRA_ID = "id"
+const val EXTRA_TITLE = "title"
+const val EXTRA_TEXT = "text"
 const val TYPE_POMODORO = "pomodoro"
 const val TYPE_TEST = "test"
 const val ACTION_REMINDER = "com.habitlair.REMINDER"
 const val ACTION_DONE = "com.habitlair.DONE"
 const val ACTION_SNOOZE = "com.habitlair.SNOOZE"
+const val ALARM_CHANNEL = "alarms_ringing"
 
 object Notifier {
     fun channelId(sound: Boolean, vibration: Boolean): String {
@@ -72,11 +74,21 @@ object Notifier {
                 nm.createNotificationChannel(ch)
             }
         }
+        // The ringing alarm plays its own looping sound from AlarmService, so the channel itself stays silent.
+        val alarm = NotificationChannel(ALARM_CHANNEL, "Ringing alarms", NotificationManager.IMPORTANCE_HIGH)
+        alarm.setSound(null, null)
+        alarm.enableVibration(false)
+        alarm.lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+        nm.createNotificationChannel(alarm)
     }
 
     fun canPost(ctx: Context): Boolean =
         Build.VERSION.SDK_INT < 33 ||
             ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
+    /** Android 14+ can revoke full-screen intents; without it an alarm only shows as a heads-up notification. */
+    fun fullScreenAllowed(ctx: Context): Boolean =
+        Build.VERSION.SDK_INT < 34 || ctx.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
 
     @SuppressLint("MissingPermission")
     fun show(ctx: Context, s: AppSettings, notifId: Int, title: String, text: String, type: String? = null, id: Long = 0L) {
@@ -95,12 +107,12 @@ object Notifier {
             .setContentIntent(open)
         if (type == Owner.HABIT || type == Owner.TASK) {
             b.addAction(0, "Done", actionIntent(ctx, ACTION_DONE, type, id, notifId))
-            b.addAction(0, "Snooze 10 min", actionIntent(ctx, ACTION_SNOOZE, type, id, notifId))
+            b.addAction(0, "Snooze " + s.snoozeMinutes + " min", actionIntent(ctx, ACTION_SNOOZE, type, id, notifId))
         }
         NotificationManagerCompat.from(ctx).notify(notifId, b.build())
     }
 
-    private fun actionIntent(ctx: Context, action: String, type: String, id: Long, notifId: Int): PendingIntent {
+    fun actionIntent(ctx: Context, action: String, type: String, id: Long, notifId: Int): PendingIntent {
         val i = Intent(ctx, ActionReceiver::class.java)
         i.action = action
         i.putExtra(EXTRA_TYPE, type)
@@ -218,24 +230,38 @@ class ReminderReceiver : BroadcastReceiver() {
             val c = app.container
             val s = c.settings.current()
             val nid = c.scheduler.notifId(type, id)
+            var title: String? = null
+            var text = ""
             if (type == Owner.HABIT) {
                 val h = c.db.habits().get(id)
                 if (h != null) {
                     val doneToday = c.db.habits().isDone(id, Dates.today()) > 0
                     if (s.remindersEnabled && !doneToday) {
-                        Notifier.show(context, s, nid, "Time for " + h.name, h.notes.ifBlank { "Tap to open HabitLair" }, type, id)
+                        title = "Time for " + h.name
+                        text = h.notes.ifBlank { "Tap to open HabitLair" }
                     }
                     c.scheduler.syncHabit(id)
                 }
             } else if (type == Owner.TASK) {
                 val t = c.db.tasks().get(id)
                 if (t != null && !t.done) {
-                    Notifier.show(context, s, nid, "Task due: " + t.title, t.notes.ifBlank { "Tap to open HabitLair" }, type, id)
+                    title = "Task due: " + t.title
+                    text = t.notes.ifBlank { "Tap to open HabitLair" }
                 }
             } else if (type == TYPE_POMODORO) {
                 Notifier.show(context, s, nid, "Pomodoro finished", "Open HabitLair to continue your session.")
             } else {
-                Notifier.show(context, s, nid, "HabitLair test alarm", "Your alarm fired on time.")
+                title = "HabitLair test alarm"
+                text = "Your alarm fired on time."
+            }
+            val t = title
+            if (t != null) {
+                if (s.alarmRings) {
+                    // A real alarm: loops sound + vibration and takes over the screen until dismissed
+                    AlarmService.start(context, type, id, t, text)
+                } else {
+                    Notifier.show(context, s, nid, t, text, type, id)
+                }
             }
         }
     }
@@ -253,8 +279,9 @@ class ActionReceiver : BroadcastReceiver() {
                 if (type == Owner.HABIT) c.repo.setHabitDone(id, Dates.today(), true)
                 else if (type == Owner.TASK) c.repo.setTaskDone(id, true)
             } else if (action == ACTION_SNOOZE) {
-                c.scheduler.snooze(type, id)
+                c.scheduler.snooze(type, id, c.settings.current().snoozeMinutes)
             }
+            AlarmService.stop(context)
             NotificationManagerCompat.from(context).cancel(notif)
         }
     }
@@ -264,11 +291,7 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         runAsync(this, context) { app ->
             app.container.scheduler.rescheduleAll()
-            try {
-                HabitWidget().updateAll(context)
-            } catch (e: Exception) {
-                // widget may not be placed; ignore
-            }
+            updateAllWidgets(context)
         }
     }
 }
@@ -277,11 +300,7 @@ class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineW
     override suspend fun doWork(): Result {
         val c = (applicationContext as HabitLairApp).container
         c.scheduler.rescheduleAll()
-        try {
-            HabitWidget().updateAll(applicationContext)
-        } catch (e: Exception) {
-            // ignore
-        }
+        updateAllWidgets(applicationContext)
         return Result.success()
     }
 }

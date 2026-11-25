@@ -129,14 +129,26 @@ fun LairSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit
     }
 }
 
+private var timeDialogTyping = true   // remembers the last mode used in this session
+
+/** Time picker where the digits can be typed directly (default) or set on the clock dial. */
 @Composable
 fun LairTimeDialog(initial: Int, onConfirm: (Int) -> Unit, onDismiss: () -> Unit) {
     val st = rememberTimePickerState(initial / 60, initial % 60, false)
+    var typing by remember { mutableStateOf(timeDialogTyping) }
     AlertDialog(
         onDismissRequest = onDismiss,
+        title = { Text(if (typing) "Type the time" else "Pick the time") },
         confirmButton = { TextButton({ onConfirm(st.hour * 60 + st.minute) }) { Text("OK") } },
-        dismissButton = { TextButton(onDismiss) { Text("Cancel") } },
-        text = { TimePicker(st) }
+        dismissButton = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton({ typing = !typing; timeDialogTyping = typing }) {
+                    Icon(if (typing) Icons.Filled.Schedule else Icons.Filled.Keyboard, if (typing) "Switch to clock" else "Switch to typing")
+                }
+                TextButton(onDismiss) { Text("Cancel") }
+            }
+        },
+        text = { if (typing) TimeInput(st) else TimePicker(st) }
     )
 }
 

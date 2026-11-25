@@ -2,9 +2,8 @@ package com.habitlair.app.data
 
 import android.content.Context
 import android.net.Uri
-import androidx.glance.appwidget.updateAll
 import androidx.room.withTransaction
-import com.habitlair.app.widget.HabitWidget
+import com.habitlair.app.widget.updateAllWidgets
 import com.habitlair.app.work.ReminderScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -152,7 +151,7 @@ class BackupManager(
         settings.replace(b.settings)
         b.apiKeys.forEach { (prov, key) -> secure.set(prov, key) }
         scheduler.rescheduleAll()
-        runCatching { HabitWidget().updateAll(ctx) }
+        updateAllWidgets(ctx)
         p.file.delete()
     }
 }

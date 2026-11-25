@@ -8,7 +8,7 @@ import kotlinx.serialization.Serializable
 import java.time.LocalDate
 
 object Owner { const val HABIT = "habit"; const val TASK = "task"; const val JOURNAL = "journal" }
-object MediaKind { const val PHOTO = "PHOTO"; const val AUDIO = "AUDIO"; const val VIDEO = "VIDEO" }
+object MediaKind { const val PHOTO = "PHOTO"; const val AUDIO = "AUDIO"; const val VIDEO = "VIDEO"; const val FILE = "FILE" }
 object IconKeys {
     val all = listOf(
         "check", "health", "study", "rest", "chat", "fitness", "book", "water",
