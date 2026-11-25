@@ -20,7 +20,11 @@ jobs:
         with:
           java-version: "17"
           distribution: "temurin"
-          cache: "gradle"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
 
       - name: Configure Android SDK & accept licenses
         env:
@@ -30,11 +34,8 @@ jobs:
           echo "sdk.dir=/usr/local/lib/android/sdk" > local.properties
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: gradle assembleDebug --stacktrace
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
