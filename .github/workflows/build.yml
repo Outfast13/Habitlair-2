@@ -1,53 +1,46 @@
-name: Build APK
+name: Build HabitLair Debug APK
 
 on:
-  push:
-    branches: [ main, master ]
-  pull_request:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+      - "**"
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: HabitLair
 
     steps:
-      - name: Check out
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
-          java-version: 17
+          java-version: "17"
+          distribution: "temurin"
+          cache: "gradle"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Configure Android SDK & accept licenses
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+        run: |
+          echo "sdk.dir=/usr/local/lib/android/sdk" > local.properties
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.13
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
 
-      - name: Build debug APK
-        run: gradle :app:assembleDebug --stacktrace
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace
 
-      - name: Upload debug APK
+      - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
           name: HabitLair-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
-
-      # Optional: an R8-optimised build that is noticeably smoother than the debug one.
-      # It is signed with the debug key, so it installs like any other APK. A failure here never fails the job.
-      - name: Build optimised APK (smoother)
-        continue-on-error: true
-        run: gradle :app:assembleRelease --stacktrace
-
-      - name: Upload optimised APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: HabitLair-optimised-apk
-          path: app/build/outputs/apk/release/*.apk
-          if-no-files-found: ignore
+          path: HabitLair/app/build/outputs/apk/debug/*.apk
